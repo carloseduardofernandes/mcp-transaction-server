@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol;
@@ -25,7 +27,7 @@ public sealed class TransactionTools
         ReadOnly = true,
         Idempotent = true)]
     [Description("Retorna os dados da transação relacionada a um pedido. Informe o ID da transação (ex: tx-001, tx-002).")]
-    public async Task<string> GetTransactionDetails(
+    public async Task<TransactionResult> GetTransactionDetails(
         [Description("ID da transação (ex: tx-001, tx-002, tx-003, tx-004, tx-005)")] string transactionId,
         CancellationToken cancellationToken = default)
     {
@@ -46,7 +48,7 @@ public sealed class TransactionTools
                 if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                 {
                     _logger.LogWarning("Transação {TransactionId} não encontrada (404)", transactionId);
-                    return $"Transação '{transactionId}' não encontrada.";
+                    return new TransactionResult(transactionId, null, null, null, null, null, null, null, "not_found");
                 }
 
                 var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -55,22 +57,26 @@ public sealed class TransactionTools
                 throw new McpException($"Erro ao consultar transação: {response.StatusCode}");
             }
 
-            var transaction = await response.Content.ReadFromJsonAsync<TransactionDto>(cancellationToken);
-            if (transaction == null)
+            var dto = await response.Content.ReadFromJsonAsync<TransactionDto>(cancellationToken);
+            if (dto == null)
             {
                 _logger.LogError("Resposta da transação {TransactionId} desserializou para null", transactionId);
-                return "Resposta inválida da API de transações.";
+                return new TransactionResult(transactionId, null, null, null, null, null, null, null, "invalid_response");
             }
 
-            _logger.LogInformation("Transação {TransactionId} encontrada com status {Status}", transaction.Id, transaction.Status);
+            _logger.LogInformation("Transação {TransactionId} encontrada com status {Status}", dto.Id, dto.Status);
 
-            return $"ID: {transaction.Id}\n" +
-                   $"Pedido: {transaction.OrderId}\n" +
-                   $"Valor: {transaction.Amount:N2} {transaction.Currency}\n" +
-                   $"Status: {transaction.Status}\n" +
-                   $"Data: {transaction.CreatedAt:dd/MM/yyyy HH:mm}\n" +
-                   $"Pagamento: {transaction.PaymentMethod}\n" +
-                   (string.IsNullOrEmpty(transaction.Description) ? "" : $"Descrição: {transaction.Description}");
+            return new TransactionResult(
+                dto.Id,
+                dto.OrderId,
+                dto.Amount,
+                dto.Currency,
+                dto.Status,
+                dto.CreatedAt,
+                dto.PaymentMethod,
+                dto.Description,
+                "ok"
+            );
         }
         catch (OperationCanceledException)
         {
@@ -104,3 +110,16 @@ public sealed class TransactionTools
         string? Description
     );
 }
+
+public sealed record TransactionResult(
+    string TransactionId,
+    string? OrderId,
+    decimal? Amount,
+    string? Currency,
+    string? Status,
+    DateTime? CreatedAt,
+    string? PaymentMethod,
+    string? Description,
+    [property: JsonPropertyName("result")]
+    string Result
+);
