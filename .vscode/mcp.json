@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "TransactionMcpServer": {
+      "type": "stdio",
+      "command": "dotnet",
+      "args": ["run", "--project", "src/TransactionMcpServer"]
+    }
+  }
+}
