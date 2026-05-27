@@ -1,0 +1,27 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
+  "description": "Servidor MCP que expõe a ferramenta GetTransactionDetails para consulta de transações via API REST.",
+  "name": "TransactionMcpServer",
+  "version": "1.0.0",
+  "packages": [
+    {
+      "registryType": "nuget",
+      "registryBaseUrl": "https://api.nuget.org",
+      "identifier": "TransactionMcpServer",
+      "version": "1.0.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [],
+      "environmentVariables": [
+        {
+          "name": "TRANSACTION_API_BASE_URL",
+          "description": "URL base da API de transações (ex: http://localhost:5274)",
+          "isRequired": true,
+          "isSecret": false,
+          "defaultValue": "http://localhost:5274"
+        }
+      ]
+    }
+  ]
+}

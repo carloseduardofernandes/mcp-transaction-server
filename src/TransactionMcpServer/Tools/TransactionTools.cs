@@ -22,7 +22,7 @@ public sealed class TransactionTools
     }
 
     [McpServerTool(
-        Name = "get_transaction_details",
+        Name = "GetTransactionDetails",
         Title = "Detalhes da Transação",
         ReadOnly = true,
         Idempotent = true)]
