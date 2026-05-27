@@ -34,27 +34,63 @@ public sealed class TransactionTools
 
         _logger.LogInformation("Buscando transação {TransactionId}", transactionId);
 
-        var client = _httpClientFactory.CreateClient("TransactionApi");
-        var response = await client.GetAsync($"/api/transactions/{Uri.EscapeDataString(transactionId.Trim())}", cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
+        try
         {
-            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                return $"Transação '{transactionId}' não encontrada.";
-            throw new McpException($"Erro ao consultar transação: {response.StatusCode}");
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var client = _httpClientFactory.CreateClient("TransactionApi");
+            var response = await client.GetAsync($"/api/transactions/{Uri.EscapeDataString(transactionId.Trim())}", cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    _logger.LogWarning("Transação {TransactionId} não encontrada (404)", transactionId);
+                    return $"Transação '{transactionId}' não encontrada.";
+                }
+
+                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogError("Erro ao consultar transação {TransactionId}: {StatusCode} - {Body}",
+                    transactionId, response.StatusCode, errorBody);
+                throw new McpException($"Erro ao consultar transação: {response.StatusCode}");
+            }
+
+            var transaction = await response.Content.ReadFromJsonAsync<TransactionDto>(cancellationToken);
+            if (transaction == null)
+            {
+                _logger.LogError("Resposta da transação {TransactionId} desserializou para null", transactionId);
+                return "Resposta inválida da API de transações.";
+            }
+
+            _logger.LogInformation("Transação {TransactionId} encontrada com status {Status}", transaction.Id, transaction.Status);
+
+            return $"ID: {transaction.Id}\n" +
+                   $"Pedido: {transaction.OrderId}\n" +
+                   $"Valor: {transaction.Amount:N2} {transaction.Currency}\n" +
+                   $"Status: {transaction.Status}\n" +
+                   $"Data: {transaction.CreatedAt:dd/MM/yyyy HH:mm}\n" +
+                   $"Pagamento: {transaction.PaymentMethod}\n" +
+                   (string.IsNullOrEmpty(transaction.Description) ? "" : $"Descrição: {transaction.Description}");
         }
-
-        var transaction = await response.Content.ReadFromJsonAsync<TransactionDto>(cancellationToken);
-        if (transaction == null)
-            return "Resposta inválida da API de transações.";
-
-        return $"ID: {transaction.Id}\n" +
-               $"Pedido: {transaction.OrderId}\n" +
-               $"Valor: {transaction.Amount:N2} {transaction.Currency}\n" +
-               $"Status: {transaction.Status}\n" +
-               $"Data: {transaction.CreatedAt:dd/MM/yyyy HH:mm}\n" +
-               $"Pagamento: {transaction.PaymentMethod}\n" +
-               (string.IsNullOrEmpty(transaction.Description) ? "" : $"Descrição: {transaction.Description}");
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("Consulta à transação {TransactionId} foi cancelada", transactionId);
+            throw;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Falha de conexão ao consultar transação {TransactionId}", transactionId);
+            throw new McpException($"Falha de conexão com a API de transações. Verifique se a API está rodando.", ex);
+        }
+        catch (McpException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro inesperado ao consultar transação {TransactionId}", transactionId);
+            throw new McpException($"Erro inesperado ao consultar transação: {ex.Message}", ex);
+        }
     }
 
     private sealed record TransactionDto(
